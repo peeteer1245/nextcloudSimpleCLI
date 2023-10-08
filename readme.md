@@ -25,5 +25,5 @@ python3 main.py --server https://example.com --user John --password Doe very_big
 or
 
 ```bash
-python3 main.py -lH /  # list contents of folders
+python3 main.py -lH /example_folder  # list contents of folders
 ```
