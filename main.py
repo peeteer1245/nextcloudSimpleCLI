@@ -19,20 +19,34 @@ def upload(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
         print("source files / folders are missing")
         print("see usage (--help) for more information")
 
+    # add trailing slash if it does not exist
+    # we only allow uploading into a directory
+    destination = args.destination if args.destination[-1:] == "/" else args.destination + "/"
+
     for file in args.source_files:
         file_path = Path(file)
         if file_path.exists():
             if file_path.is_dir():
-                print(f"uploading dir {file}")
-                nc.put_directory(args.destination, file, chunked=True)
-            else:
-                print(f"uploading file {file}")
+                print(f"uploading dir {file} to {destination}")
                 try:
-                    nc.mkdir(args.destination)
-                except:
-                    pass
-                nc.put_file(args.destination, file, chunked=True)
-    pass
+                    nc.put_directory(destination, file, chunked=True)
+                except nextcloud_client.nextcloud_client.HTTPResponseError as e:
+                    if e.status_code == 405:
+                        print(f"Could not upload {file}.")
+                        print(f"{file} already exists in {destination}.")
+                        print("Remove it from Nextcloud or set a different destination.")
+                    continue
+            else:
+                print(f"uploading file {file} to {destination}")
+                try:
+                    nc.mkdir(destination)
+                except nextcloud_client.nextcloud_client.HTTPResponseError as e:
+                    # target directory already exists
+                    if e.status_code == 409:
+                        pass
+                nc.put_file(destination, file, chunked=True)
+        else:
+            print(f"{file_path} does not exist")
 
 
 def sizeof_fmt(num, suffix=""):
