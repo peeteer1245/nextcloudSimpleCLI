@@ -93,11 +93,16 @@ def list(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
     :param nc: a already logged-in nextcloud session
     :returns: None
     """
-    dst_info = nc.file_info(args.destination)
-    if dst_info is not None:
-        _print_nc_files(args.human_readable, nc.list(args.destination))
-    elif dst_info is not None:
-        _print_nc_files(args.human_readable, [dst_info])
+    all_destinations = [args.destination] + args.source_files
+    for destination in all_destinations:
+        if len(all_destinations) > 1:
+            print(f"{destination}:")
+
+        dst_info = nc.file_info(destination)
+        if dst_info is not None and dst_info.is_dir():
+            _print_nc_files(args.human_readable, nc.list(destination))
+        elif dst_info is not None:
+            _print_nc_files(args.human_readable, [dst_info])
 
 
 def nextcloud_connect(args: argparse.Namespace) -> nextcloud_client.Client:
