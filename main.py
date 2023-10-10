@@ -155,7 +155,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("destination", help="destination folder")
 
     parser.add_argument(
-        "-l", action="store_true", help="list the files in Nextcloud source_files"
+        "-l", action="store_true", help="list Nextcloud directory contents"
     )
     parser.add_argument(
         "-H",
