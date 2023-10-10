@@ -112,7 +112,15 @@ def list(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
         if len(all_destinations) > 1:
             print(f"{destination}:")
 
-        dst_info = nc.file_info(destination)
+        try:
+            dst_info = nc.file_info(destination)
+        except nextcloud_client.nextcloud_client.HTTPResponseError as e:
+            if e.status_code == 404:
+                print(f"{destination} not found")
+            else:
+                raise e
+            continue
+
         if dst_info is not None and dst_info.is_dir():
             _print_nc_files(args.human_readable, nc.list(destination))
         elif dst_info is not None:
