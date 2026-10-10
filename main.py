@@ -25,6 +25,7 @@ async def upload(args: argparse.Namespace, nc: nc_py_api.AsyncNextcloud) -> None
     # add trailing slash if it does not exist
     # we only allow uploading into a directory
     destination = args.destination if args.destination[-1:] == "/" else args.destination + "/"
+    share_links = []
 
     for file in args.source_files:
         file_path = Path(file)
@@ -43,6 +44,17 @@ async def upload(args: argparse.Namespace, nc: nc_py_api.AsyncNextcloud) -> None
                 await nc.files.upload_stream(destination + file_path.name, file_path)
         else:
             print(f"{file_path} does not exist")
+        if args.clipboard == True:
+            share_info = await nc.files.sharing.create(
+                destination + file_path.name,
+                nc_py_api.files.ShareType.TYPE_LINK,
+                nc_py_api.files.FilePermissions.PERMISSION_READ
+            )
+            url = share_info.url
+            share_links.append(url)
+            print(url)
+    if args.clipboard == True:
+        pyperclip.copy("\n".join(share_links))
 
 
 def sizeof_fmt(num, suffix=""):
@@ -176,7 +188,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-s", "--server", help="url of nextcloud server")
     parser.add_argument("-u", "--user", help="login username")
     parser.add_argument("-p", "--password", help="login password")
-
+    parser.add_argument("--clipboard", action="store_true", help="add public link to clipboard")
     args = parser.parse_args()
 
     return args

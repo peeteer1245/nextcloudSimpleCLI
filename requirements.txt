@@ -1,1 +1,2 @@
 nc_py_api
+pyperclip
