@@ -1,1 +1,1 @@
-pyncclient
+nc_py_api

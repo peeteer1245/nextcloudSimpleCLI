@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 
 import json
+import asyncio
 import argparse
-import nextcloud_client
 from pathlib import Path, PurePath
+
+import pyperclip
+import nc_py_api
 
 DEFAULT_SETTINGS_FILE = "config.json"
 
 
-def upload(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
+async def upload(args: argparse.Namespace, nc: nc_py_api.AsyncNextcloud) -> None:
     """upload files to nextcloud with the chunking api (no size limit)
 
     :param args: already parsed arguments
@@ -27,24 +30,17 @@ def upload(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
         file_path = Path(file)
         if file_path.exists():
             if file_path.is_dir():
-                print(f"uploading dir {file} to {destination}")
-                try:
-                    nc.put_directory(destination, file, chunked=True)
-                except nextcloud_client.nextcloud_client.HTTPResponseError as e:
-                    if e.status_code == 405:
-                        print(f"Could not upload {file}.")
-                        print(f"{file} already exists in {destination}.")
-                        print("Remove it from Nextcloud or set a different destination.")
-                    continue
+                print(f"file {file} is a directory. Can only upload files")
+                continue
             else:
                 print(f"uploading file {file} to {destination}")
                 try:
-                    nc.mkdir(destination)
-                except nextcloud_client.nextcloud_client.HTTPResponseError as e:
+                    await nc.files.mkdir(destination)
+                except nc_py_api._exceptions.NextcloudException as e:
                     # target directory already exists
-                    if e.status_code == 409:
+                    if e.status_code == 405:
                         pass
-                nc.put_file(destination, file, chunked=True)
+                await nc.files.upload_stream(destination + file_path.name, file_path)
         else:
             print(f"{file_path} does not exist")
 
@@ -68,17 +64,10 @@ def _print_nc_files(print_human: bool, file_list: list) -> None:
     :returns: None
     """
 
-    def _get_file_size(file: nextcloud_client.FileInfo):
-        if file.is_dir():
-            file_size = int(file.attributes[r"{DAV:}quota-used-bytes"])
-        else:
-            file_size = int(file.get_size())
-        return file_size
-
     padding = 0
     # first loop to get correct padding dimensions
     for file in file_list:
-        file_size = _get_file_size(file)
+        file_size = file.info.size
         if print_human:
             file_size = sizeof_fmt(file_size)
 
@@ -88,19 +77,19 @@ def _print_nc_files(print_human: bool, file_list: list) -> None:
 
     # second loop to acually print
     for file in file_list:
-        file_size = _get_file_size(file)
+        file_size = file.info.size
         if print_human:
             file_size = sizeof_fmt(file_size)
 
-        file_path = PurePath(file.path).name
-        if file.is_dir():
+        file_path = PurePath(file.name).name
+        if file.is_dir:
             file_path += "/"
 
-        last_modified = file.get_last_modified()
+        last_modified = file.info.last_modified
         print(f"{file_size:>{padding}} {last_modified} {file_path}")
 
 
-def list(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
+async def list(args: argparse.Namespace, nc: nc_py_api.AsyncNextcloud) -> None:
     """list remote files/folders
 
     :param args: already parsed arguments
@@ -113,21 +102,18 @@ def list(args: argparse.Namespace, nc: nextcloud_client.Client) -> None:
             print(f"{destination}:")
 
         try:
-            dst_info = nc.file_info(destination)
-        except nextcloud_client.nextcloud_client.HTTPResponseError as e:
+            dst_info = await nc.files.listdir(destination)
+        except nc_py_api._exceptions.NextcloudExceptionNotFound as e:
             if e.status_code == 404:
                 print(f"{destination} not found")
             else:
                 raise e
             continue
 
-        if dst_info is not None and dst_info.is_dir():
-            _print_nc_files(args.human_readable, nc.list(destination))
-        elif dst_info is not None:
-            _print_nc_files(args.human_readable, [dst_info])
+        _print_nc_files(args.human_readable, dst_info)
 
 
-def nextcloud_connect(args: argparse.Namespace) -> nextcloud_client.Client:
+def nextcloud_connect(args: argparse.Namespace) -> nc_py_api.AsyncNextcloud:
     """create a authenticated nextcloud session
 
     :param args: already parsed arguments
@@ -159,8 +145,7 @@ def nextcloud_connect(args: argparse.Namespace) -> nextcloud_client.Client:
         # this should never be reached
         pass
 
-    nc = nextcloud_client.Client(url)
-    nc.login(username, password)
+    nc = nc_py_api.AsyncNextcloud(nextcloud_url=url, nc_auth_user=username, nc_auth_pass=password)
 
     return nc
 
@@ -177,7 +162,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("destination", help="destination folder")
 
     parser.add_argument(
-        "-l", action="store_true", help="list Nextcloud directory contents"
+        "-l", "--list", action="store_true", help="list Nextcloud directory contents"
     )
     parser.add_argument(
         "-H",
@@ -197,16 +182,16 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main() -> None:
+async def main() -> None:
     parsed_args = parse_args()
 
     nc = nextcloud_connect(parsed_args)
 
-    if parsed_args.l == True:
-        list(parsed_args, nc)
+    if parsed_args.list == True:
+        await list(parsed_args, nc)
     else:
-        upload(parsed_args, nc)
+        await upload(parsed_args, nc)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
